@@ -17,5 +17,13 @@ class ImageEncoder(nn.Module):
         for p in self.model.parameters():
             p.requires_grad = trainable
     def forward(self, x):
-        x = self.model(x)
-        return x   
+        # x = self.model(x)
+        # return x
+
+        unpooled_features = self.model.forward_features(x)
+        
+        features = self.model.forward_head(unpooled_features, pre_logits=True)
+        
+        logits = self.model.get_classifier()(features)
+        
+        return features, logits
