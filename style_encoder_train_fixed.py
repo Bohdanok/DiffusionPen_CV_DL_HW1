@@ -1113,7 +1113,63 @@ def train_triplet(model, train_loader, val_loader, criterion, optimizer, schedul
             print("Saved Best Model!")
         
         scheduler.step(val_loss)
+
+class UkrTextRecDataset_style(WordLineDataset): ## my addition
+    def __init__(self, basefolder, subset, segmentation_level, fixed_size, transforms):
+        super().__init__(basefolder, subset, segmentation_level, fixed_size, transforms)
+        self.setname = 'UkrTextRec'
         
+        self.labels_file = os.path.join(self.basefolder, f'{subset}.txt')
+        self.img_folder = os.path.join(self.basefolder, 'lines') 
+        
+        super().__finalize__()
+
+    def main_loader(self, subset, segmentation_level) -> list:
+        data = []
+        
+        with open(self.labels_file, 'r', encoding='utf-8') as f:
+            lines = f.readlines()
+            
+        for i, line in enumerate(lines):
+            line = line.strip()
+            if not line or line.startswith('#'): 
+                continue
+            
+            parts = line.split(maxsplit=1)
+            if len(parts) != 2: 
+                continue
+            
+            line_id = parts[0]
+            transcr = parts[1]
+            
+            ## extract author id: a01-001-0023-01 -> 0023
+            id_parts = line_id.split('-')
+            if len(id_parts) >= 3:
+                writer_name = id_parts[2]
+            else:
+                continue
+            
+            img_path = os.path.join(self.img_folder, f'{line_id}.png')
+            
+            if i % 1000 == 0:
+                print('imgs: [{}/{} ({:.0f}%)]'.format(i, len(lines), 100. * i / len(lines)))
+
+            try:
+                img = Image.open(img_path).convert('RGB')
+                
+                if img.height < 64 and img.width < 256:
+                    pass
+                else:
+                    img = image_resize_PIL(img, height=img.height // 2)
+                    
+                transcr = transcr.replace(" ", "")
+                transcr = transcr.replace("|", " ")
+                
+                data.append((img, transcr, writer_name, img_path))
+            except FileNotFoundError:
+                continue
+                
+        return data
         
 
 def main():
@@ -1156,7 +1212,9 @@ def main():
         
         #train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 64, 256), tokenizer=None, text_encoder=None, feat_extractor=None, transforms=train_transform, args=args)
         train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 64, 256), transforms=train_transform)
-        
+        # print(f"{train_data.shape = }")
+
+        # assert False
         #print('len train data', len(train_data))
         #split with torch.utils.data.Subset into train and val
         validation_size = int(0.2 * len(train_data))
@@ -1178,6 +1236,31 @@ def main():
             
         style_classes = 339
     
+    elif args.dataset == 'ukr':
+        myDataset = UkrTextRecDataset_style
+        dataset_folder = './ukrainian-handwritten-text/'
+        
+        train_transform = transforms.Compose([
+                            transforms.Resize(IMG_SIZE),
+                            transforms.ToTensor(),
+                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) 
+                            ])
+        
+        train_data = myDataset(dataset_folder, 'train', 'line', fixed_size=(1 * 64, 256), transforms=train_transform)
+        
+        style_classes = train_data.wclasses
+        print(f'Detected {style_classes} unique author classes.')
+
+        validation_size = int(0.2 * len(train_data))
+        train_size = len(train_data) - validation_size
+
+        train_dataset, val_dataset = random_split(train_data, [train_size, validation_size], generator=torch.Generator().manual_seed(42))
+        print('len train data', len(train_dataset))
+        print('len val data', len(val_dataset))
+        
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, collate_fn=train_data.collate_fn) ## pytorch stacking
+        val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, collate_fn=train_data.collate_fn)
+
     else:
         print('You need to add your own dataset and define the number of style classes!!!')
     
