@@ -1114,40 +1114,47 @@ def train_triplet(model, train_loader, val_loader, criterion, optimizer, schedul
         
         scheduler.step(val_loss)
 
-class UkrTextRecDataset_style(WordLineDataset): ## my addition
+class UkrTextRecDataset_style(WordLineDataset):
     def __init__(self, basefolder, subset, segmentation_level, fixed_size, transforms):
         super().__init__(basefolder, subset, segmentation_level, fixed_size, transforms)
         self.setname = 'UkrTextRec'
         
-        self.labels_file = os.path.join(self.basefolder, f'{subset}.txt')
-        self.img_folder = os.path.join(self.basefolder, 'lines') 
+        self.labels_file = os.path.join(self.basefolder, 'METAFILE.tsv')
+        self.img_folder = os.path.join(self.basefolder, 'lines', 'lines') 
         
         super().__finalize__()
 
     def main_loader(self, subset, segmentation_level) -> list:
         data = []
-        
+        if not os.path.exists(self.labels_file):
+            raise FileNotFoundError(f"Could not find labels file at {self.labels_file}")
+
         with open(self.labels_file, 'r', encoding='utf-8') as f:
             lines = f.readlines()
             
         for i, line in enumerate(lines):
             line = line.strip()
-            if not line or line.startswith('#'): 
+            
+            if not line or line.startswith('#') or line.startswith('filename'): 
                 continue
             
             parts = line.split(maxsplit=1)
-            if len(parts) != 2: 
+            if len(parts) < 2: 
                 continue
             
             line_id = parts[0]
             transcr = parts[1]
             
-            ## extract author id: a01-001-0023-01 -> 0023
-            id_parts = line_id.split('-')
+            if line_id.endswith('.png'):
+                line_id = line_id[:-4]
+            
+            id_parts = line_id.replace('_', '-').split('-')
             if len(id_parts) >= 3:
-                writer_name = id_parts[2]
+                writer_name = id_parts[2] 
+            elif len(id_parts) >= 2:
+                writer_name = id_parts[0] 
             else:
-                continue
+                writer_name = "unknown_writer" 
             
             img_path = os.path.join(self.img_folder, f'{line_id}.png')
             
@@ -1167,10 +1174,12 @@ class UkrTextRecDataset_style(WordLineDataset): ## my addition
                 
                 data.append((img, transcr, writer_name, img_path))
             except FileNotFoundError:
+                print("Not found!")
                 continue
                 
         return data
-        
+
+
 
 def main():
     '''Main function'''
@@ -1238,7 +1247,7 @@ def main():
     
     elif args.dataset == 'ukr':
         myDataset = UkrTextRecDataset_style
-        dataset_folder = './ukrainian-handwritten-text/'
+        dataset_folder = '/content/ukrainian-handwritten-text/'
         
         train_transform = transforms.Compose([
                             transforms.Resize(IMG_SIZE),
