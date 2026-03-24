@@ -1321,7 +1321,7 @@ def main():
 
     elif args.dataset == 'ukr':
         myDataset = UkrTextRecDataset_style
-        dataset_folder = '/content/ukrainian-handwritten-text/'
+        dataset_folder = '/workspace/ukrainian-handwritten-text/'
         
         train_transform = transforms.Compose([
                             transforms.Resize(IMG_SIZE),

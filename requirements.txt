@@ -7,3 +7,5 @@ tqdm
 timm
 opencv-python
 matplotlib
+gdown
+kaggle
