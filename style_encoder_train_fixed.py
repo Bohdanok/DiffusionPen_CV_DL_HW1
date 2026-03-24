@@ -1177,6 +1177,11 @@ class UkrTextRecDataset_style(WordLineDataset):
                 print("Not found!")
                 continue
                 
+        unique_writers = list(set([d[2] for d in data]))
+        writer_to_id = {w: i for i, w in enumerate(unique_writers)}
+        
+        data = [(d[0], d[1], writer_to_id[d[2]], d[3]) for d in data]
+        
         return data
 
 
@@ -1267,8 +1272,8 @@ def main():
         print('len train data', len(train_dataset))
         print('len val data', len(val_dataset))
         
-        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4, collate_fn=train_data.collate_fn) ## pytorch stacking
-        val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4, collate_fn=train_data.collate_fn)
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4) 
+        val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
     else:
         print('You need to add your own dataset and define the number of style classes!!!')
