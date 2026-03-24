@@ -1284,68 +1284,41 @@ def main():
         dataset_folder = './iam_data/'
         aug_transforms = [lambda x: affine_transformation(x, s=.1)]
         
-        train_transform = transforms.Compose([ ## I do not like this, maybe add some augmentations here XD
+        train_transform = transforms.Compose([ 
                             transforms.Resize(IMG_SIZE),
                             transforms.ToTensor(),
-                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) #transforms.Normalize((0.5,), (0.5,)),  #
+                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) 
                             ])
         
         val_transform = transforms.Compose([
                             transforms.Resize(IMG_SIZE),
                             transforms.ToTensor(),
-                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) #transforms.Normalize((0.5,), (0.5,)),  #
+                            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) 
                             ])
         
-        #train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 64, 256), tokenizer=None, text_encoder=None, feat_extractor=None, transforms=train_transform, args=args)
         train_data = myDataset(dataset_folder, 'train', 'word', fixed_size=(1 * 64, 256), transforms=train_transform)
-        # print(f"{train_data.shape = }")
 
-        # assert False
-        #print('len train data', len(train_data))
-        #split with torch.utils.data.Subset into train and val
-        validation_size = int(0.2 * len(train_data))
+        total_len = len(train_data)
+        train_size = int(0.8 * total_len)
+        validation_size = int(0.1 * total_len)
+        test_size = total_len - train_size - validation_size
 
-        # Calculate the size of the training set
-        train_size = len(train_data) - validation_size
-
-        # Use random_split to split the dataset into train and validation sets
-        train_data, val_data = random_split(train_data, [train_size, validation_size], generator=torch.Generator().manual_seed(42))
-        print('len train data', len(train_data))
-        print('len val data', len(val_data))
+        train_dataset, val_dataset, test_dataset = random_split(
+            train_data, 
+            [train_size, validation_size, test_size], 
+            generator=torch.Generator().manual_seed(42)
+        )
         
-        train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=4)
-        val_loader = DataLoader(val_data, batch_size=args.batch_size, shuffle=False, num_workers=4)
-        if val_loader is not None:
-            print('Val data')
-        else:
-            print('No validation data')
+        print('len train data:', len(train_dataset))
+        print('len val data:', len(val_dataset))
+        print('len test data:', len(test_dataset))
+        
+        train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
+        val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
+        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
             
         style_classes = 339
-    
-    # elif args.dataset == 'ukr':
-    #     myDataset = UkrTextRecDataset_style
-    #     dataset_folder = '/content/ukrainian-handwritten-text/'
-        
-    #     train_transform = transforms.Compose([
-    #                         transforms.Resize(IMG_SIZE),
-    #                         transforms.ToTensor(),
-    #                         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) 
-    #                         ])
-        
-    #     train_data = myDataset(dataset_folder, 'train', 'line', fixed_size=(1 * 64, 256), transforms=train_transform)
-        
-    #     style_classes = train_data.wclasses
-    #     print(f'Detected {style_classes} unique author classes.')
 
-    #     validation_size = int(0.2 * len(train_data))
-    #     train_size = len(train_data) - validation_size
-
-    #     train_dataset, val_dataset = random_split(train_data, [train_size, validation_size], generator=torch.Generator().manual_seed(42))
-    #     print('len train data', len(train_dataset))
-    #     print('len val data', len(val_dataset))
-        
-    #     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4) 
-    #     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
     elif args.dataset == 'ukr':
         myDataset = UkrTextRecDataset_style
         dataset_folder = '/content/ukrainian-handwritten-text/'
