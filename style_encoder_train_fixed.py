@@ -21,6 +21,37 @@ import cv2
 import time
 import json
 import random
+import matplotlib.pyplot as plt
+
+def plot_metrics(history, save_path, dataset_name, mode):
+    epochs = range(1, len(history['train_loss']) + 1)
+    
+    plt.figure(figsize=(12, 5))
+    
+    plt.subplot(1, 2, 1)
+    plt.plot(epochs, history['train_loss'], label='Train Loss')
+    if history['val_loss']:
+        plt.plot(epochs, history['val_loss'], label='Val Loss')
+    plt.title(f'{mode.capitalize()} Training and Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    
+    if history['train_acc']:
+        plt.subplot(1, 2, 2)
+        plt.plot(epochs, history['train_acc'], label='Train Acc')
+        if history['val_acc']:
+            plt.plot(epochs, history['val_acc'], label='Val Acc')
+        plt.title(f'{mode.capitalize()} Training and Validation Accuracy')
+        plt.xlabel('Epochs')
+        plt.ylabel('Accuracy')
+        plt.legend()
+
+    plt.tight_layout()
+    plot_file = os.path.join(save_path, f'{dataset_name}_{mode}_metrics.png')
+    plt.savefig(plot_file)
+    print(f"Metrics plot saved to {plot_file}")
+    plt.close()
 
 
 class AvgMeter:
@@ -971,11 +1002,18 @@ def train_epoch_mixed(train_loader, model, criterion_triplet, criterion_classifi
         pbar.set_postfix(mixed_loss=loss_meter.avg, classification_loss=loss_meter_class.avg, triplet_loss=loss_meter_triplet.avg)
         total += img.size(0)
     
+    # accuracy = n_corrects/total
+    # print('total', total)
+    # print("Training Loss: {:.4f}".format(running_loss/len(train_loader)))
+    # print("Training Accuracy: {:.4f}".format(accuracy*100))
+    # return running_loss/total #np.mean(running_loss)/total
     accuracy = n_corrects/total
     print('total', total)
-    print("Training Loss: {:.4f}".format(running_loss/len(train_loader)))
+    print("Training Loss: {:.4f}".format(running_loss/total)) # len(train_loader) -> total fix
     print("Training Accuracy: {:.4f}".format(accuracy*100))
-    return running_loss/total #np.mean(running_loss)/total
+    
+    # CHANGE THIS RETURN:
+    return running_loss/total, accuracy
 
 def val_epoch_mixed(val_loader, model, criterion_triplet, criterion_classification, optimizer, device, args):
     
@@ -1011,11 +1049,17 @@ def val_epoch_mixed(val_loader, model, criterion_triplet, criterion_classificati
         pbar.set_postfix(mixed_loss=loss_meter.avg)
         total += wid.size(0)
     
-    print('total', total)
+    # print('total', total)
+    # accuracy = n_corrects/total
+    # print("Validation Loss: {:.4f}".format(running_loss/len(val_loader)))
+    # print("Validation Accuracy: {:.4f}".format(accuracy*100))
+    # return running_loss/total #np.mean(running_loss)/total
     accuracy = n_corrects/total
-    print("Validation Loss: {:.4f}".format(running_loss/len(val_loader)))
+    print("Validation Loss: {:.4f}".format(running_loss/total))
     print("Validation Accuracy: {:.4f}".format(accuracy*100))
-    return running_loss/total #np.mean(running_loss)/total
+    
+    # CHANGE THIS RETURN:
+    return running_loss/total, accuracy
 
 
 
@@ -1024,23 +1068,51 @@ def val_epoch_mixed(val_loader, model, criterion_triplet, criterion_classificati
 
 #TRAINING CALLS
 
+# def train_mixed(model, train_loader, val_loader, criterion_triplet, criterion_classification, optimizer, scheduler, device, args):
+#     best_loss = float('inf')
+#     for epoch_i in range(args.epochs):
+#         model.train()
+#         train_loss = train_epoch_mixed(train_loader, model, criterion_triplet, criterion_classification, optimizer, device, args)
+#         print("Epoch: {}/{}".format(epoch_i+1, args.epochs))
+        
+#         model.eval()
+#         with torch.no_grad():
+#             val_loss = val_epoch_mixed(val_loader, model, criterion_triplet, criterion_classification, optimizer, device, args)
+        
+#         if val_loss < best_loss:
+#             best_loss =val_loss
+#             torch.save(model.state_dict(), f'{args.save_path}/mixed_{args.dataset}_{args.model}.pth')
+#             print("Saved Best Model!")
+        
+#         scheduler.step(val_loss)
 def train_mixed(model, train_loader, val_loader, criterion_triplet, criterion_classification, optimizer, scheduler, device, args):
     best_loss = float('inf')
+    
+    history = {'train_loss': [], 'val_loss': [], 'train_acc': [], 'val_acc': []}
+    
     for epoch_i in range(args.epochs):
-        model.train()
-        train_loss = train_epoch_mixed(train_loader, model, criterion_triplet, criterion_classification, optimizer, device, args)
         print("Epoch: {}/{}".format(epoch_i+1, args.epochs))
+        
+        model.train()
+        train_loss, train_acc = train_epoch_mixed(train_loader, model, criterion_triplet, criterion_classification, optimizer, device, args)
         
         model.eval()
         with torch.no_grad():
-            val_loss = val_epoch_mixed(val_loader, model, criterion_triplet, criterion_classification, optimizer, device, args)
+            val_loss, val_acc = val_epoch_mixed(val_loader, model, criterion_triplet, criterion_classification, optimizer, device, args)
+        
+        history['train_loss'].append(train_loss)
+        history['train_acc'].append(train_acc)
+        history['val_loss'].append(val_loss)
+        history['val_acc'].append(val_acc)
         
         if val_loss < best_loss:
-            best_loss =val_loss
+            best_loss = val_loss
             torch.save(model.state_dict(), f'{args.save_path}/mixed_{args.dataset}_{args.model}.pth')
             print("Saved Best Model!")
         
         scheduler.step(val_loss)
+        
+    plot_metrics(history, args.save_path, args.dataset, args.mode)
         
         
 def train_classification(model, training_data, validation_data, optimizer, scheduler, device, args): #scheduler # after optimizer
@@ -1250,6 +1322,30 @@ def main():
             
         style_classes = 339
     
+    # elif args.dataset == 'ukr':
+    #     myDataset = UkrTextRecDataset_style
+    #     dataset_folder = '/content/ukrainian-handwritten-text/'
+        
+    #     train_transform = transforms.Compose([
+    #                         transforms.Resize(IMG_SIZE),
+    #                         transforms.ToTensor(),
+    #                         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)) 
+    #                         ])
+        
+    #     train_data = myDataset(dataset_folder, 'train', 'line', fixed_size=(1 * 64, 256), transforms=train_transform)
+        
+    #     style_classes = train_data.wclasses
+    #     print(f'Detected {style_classes} unique author classes.')
+
+    #     validation_size = int(0.2 * len(train_data))
+    #     train_size = len(train_data) - validation_size
+
+    #     train_dataset, val_dataset = random_split(train_data, [train_size, validation_size], generator=torch.Generator().manual_seed(42))
+    #     print('len train data', len(train_dataset))
+    #     print('len val data', len(val_dataset))
+        
+    #     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4) 
+    #     val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
     elif args.dataset == 'ukr':
         myDataset = UkrTextRecDataset_style
         dataset_folder = '/content/ukrainian-handwritten-text/'
@@ -1265,15 +1361,24 @@ def main():
         style_classes = train_data.wclasses
         print(f'Detected {style_classes} unique author classes.')
 
-        validation_size = int(0.2 * len(train_data))
-        train_size = len(train_data) - validation_size
+        total_len = len(train_data)
+        train_size = int(0.8 * total_len)
+        validation_size = int(0.1 * total_len)
+        test_size = total_len - train_size - validation_size
 
-        train_dataset, val_dataset = random_split(train_data, [train_size, validation_size], generator=torch.Generator().manual_seed(42))
-        print('len train data', len(train_dataset))
-        print('len val data', len(val_dataset))
+        train_dataset, val_dataset, test_dataset = random_split(
+            train_data, 
+            [train_size, validation_size, test_size], 
+            generator=torch.Generator().manual_seed(42)
+        )
+        
+        print('len train data:', len(train_dataset))
+        print('len val data:', len(val_dataset))
+        print('len test data:', len(test_dataset))
         
         train_loader = DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, num_workers=4) 
         val_loader = DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
+        test_loader = DataLoader(test_dataset, batch_size=args.batch_size, shuffle=False, num_workers=4)
 
     else:
         print('You need to add your own dataset and define the number of style classes!!!')
@@ -1341,6 +1446,34 @@ def main():
         train_classification(model, train_loader, val_loader, optimizer_ft, scheduler, device, args)
         print('finished training')
     
+    
+    print("\n" + "="*40)
+    print("      EVALUATING ON TEST SET")
+    print("="*40)
+    
+    best_model_path = f"{args.save_path}/{args.mode}_{args.dataset}_{args.model}.pth"
+    if os.path.exists(best_model_path):
+        model.load_state_dict(torch.load(best_model_path, map_location=device))
+        print(f"Loaded best model from {best_model_path}")
+    else:
+        print("Warning: Best model weights not found. Testing with current weights.")
+
+    model.eval()
+    with torch.no_grad():
+        if args.mode == 'mixed':
+            test_loss, test_acc = val_epoch_mixed(test_loader, model, criterion_triplet, None, optimizer_ft, device, args)
+            print("\nFinal Test Metrics:")
+            print(f"Test Loss: {test_loss:.4f}")
+            print(f"Test Accuracy: {test_acc*100:.2f}%")
+        elif args.mode == 'classification':
+            test_loss, test_acc = eval_class_epoch(model, test_loader, args)
+            print("\nFinal Test Metrics:")
+            print(f"Test Loss: {test_loss:.4f}")
+            print(f"Test Accuracy: {test_acc*100:.2f}%")
+        elif args.mode == 'triplet':
+            test_loss = val_epoch_triplet(test_loader, model, criterion, optimizer_ft, device, args)
+            print("\nFinal Test Metrics:")
+            print(f"Test Loss: {test_loss:.4f}")
     
 if __name__ == '__main__':
     main()
